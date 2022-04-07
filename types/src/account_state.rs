@@ -16,7 +16,7 @@ use crate::{
         access_path_for_config, dpn_access_path_for_config, ConfigurationResource, OnChainConfig,
         RegisteredCurrencies, VMPublishingOption, ValidatorSet, Version,
     },
-    state_store::state_value::StateValue,
+    state_store::state_value::{StateKeyAndValue, StateValue},
     timestamp::TimestampResource,
     validator_config::{ValidatorConfigResource, ValidatorOperatorConfigResource},
 };
@@ -341,6 +341,14 @@ impl TryFrom<&StateValue> for AccountState {
             .ok_or_else(|| format_err!("Empty state value passed"))?;
 
         AccountState::try_from(bytes).map_err(Into::into)
+    }
+}
+
+impl TryFrom<&StateKeyAndValue> for AccountState {
+    type Error = Error;
+
+    fn try_from(state_key_and_value: &StateKeyAndValue) -> Result<Self> {
+        AccountState::try_from(&state_key_and_value.value)
     }
 }
 

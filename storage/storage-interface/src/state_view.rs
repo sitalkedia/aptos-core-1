@@ -21,7 +21,7 @@ impl DbStateView {
                 .get_state_value_with_proof_by_version(key, version)
                 .map(|(value_opt, _proof)| {
                     // Hack: `v.maybe_bytes == None` represents deleted value, deemed non-existent
-                    value_opt.and_then(|value| value.maybe_bytes)
+                    value_opt.and_then(|value| value.value.maybe_bytes)
                 })
         } else {
             Ok(None)

@@ -4,7 +4,7 @@
 use crate::{
     account_state_blob::AccountStateBlob,
     ledger_info::LedgerInfo,
-    proof::{SparseMerkleRangeProof, StateStoreValueProof},
+    proof::{SparseMerkleRangeProof, StateStoreKeyValueProof},
     state_store::state_key::StateKey,
     transaction::Version,
 };
@@ -81,13 +81,13 @@ impl CryptoHash for StateValue {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
 pub struct StateValueChunkWithProof {
-    pub first_index: u64,                         // The first account index in chunk
-    pub last_index: u64,                          // The last account index in chunk
-    pub first_key: HashValue,                     // The first account key in chunk
-    pub last_key: HashValue,                      // The last account key in chunk
-    pub raw_values: Vec<(HashValue, StateValue)>, // The account blobs in the chunk
+    pub first_index: u64,     // The first account index in chunk
+    pub last_index: u64,      // The last account index in chunk
+    pub first_key: HashValue, // The first account key in chunk
+    pub last_key: HashValue,  // The last account key in chunk
+    pub raw_values: Vec<(HashValue, StateKeyAndValue)>, // The account blobs in the chunk
     pub proof: SparseMerkleRangeProof, // The proof to ensure the chunk is in the account states
-    pub root_hash: HashValue,          // The root hash of the sparse merkle tree for this chunk
+    pub root_hash: HashValue, // The root hash of the sparse merkle tree for this chunk
 }
 
 impl StateValueChunkWithProof {
@@ -110,12 +110,12 @@ pub struct StateValueWithProof {
     /// means the key does not exist.
     pub value: Option<StateValue>,
     /// The proof the client can use to authenticate the value.
-    pub proof: StateStoreValueProof,
+    pub proof: StateStoreKeyValueProof,
 }
 
 impl StateValueWithProof {
     /// Constructor.
-    pub fn new(version: Version, value: Option<StateValue>, proof: StateStoreValueProof) -> Self {
+    pub fn new(version: Version, value: Option<StateValue>, proof: StateStoreKeyValueProof) -> Self {
         Self {
             version,
             value,
@@ -147,8 +147,31 @@ impl StateValueWithProof {
             ledger_info,
             version,
             state_store_key.hash(),
-            self.value.as_ref(),
+            self.value.clone().map(|x| StateKeyAndValue::new(state_store_key, x)).as_ref(),
         )
+    }
+}
+
+#[derive(
+    Clone, Debug, CryptoHasher, Eq, PartialEq, Serialize, Deserialize, Ord, PartialOrd, Hash,
+)]
+#[cfg_attr(any(test, feature = "fuzzing"), derive(proptest_derive::Arbitrary))]
+pub struct StateKeyAndValue {
+    pub key: StateKey,
+    pub value: StateValue,
+}
+
+impl StateKeyAndValue {
+    pub fn new(key: StateKey, value: StateValue) -> Self {
+        Self { key, value }
+    }
+}
+
+impl CryptoHash for StateKeyAndValue {
+    type Hasher = StateKeyAndValueHasher;
+
+    fn hash(&self) -> HashValue {
+        self.value.hash
     }
 }
 

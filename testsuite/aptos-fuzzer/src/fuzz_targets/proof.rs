@@ -8,7 +8,7 @@ use aptos_types::{
     account_state_blob::AccountStateBlob,
     ledger_info::LedgerInfo,
     proof::{
-        EventProof, SparseMerkleProof, StateStoreValueProof, TestAccumulatorProof,
+        EventProof, SparseMerkleProof, StateStoreKeyValueProof, TestAccumulatorProof,
         TestAccumulatorRangeProof, TransactionInfoListWithProof, TransactionInfoWithProof,
     },
     state_store::state_value::StateValue,
@@ -145,7 +145,7 @@ pub struct AccountStateProofFuzzer;
 
 #[derive(Debug, Arbitrary)]
 struct AccountStateProofFuzzerInput {
-    proof: StateStoreValueProof,
+    proof: StateStoreKeyValueProof,
     ledger_info: LedgerInfo,
     state_version: Version,
     account_address_hash: HashValue,

@@ -50,6 +50,7 @@ use std::{
     convert::{TryFrom, TryInto},
     iter::Iterator,
 };
+use crate::state_store::state_value::StateKeyAndValue;
 
 impl WriteOp {
     pub fn value_strategy() -> impl Strategy<Value = Self> {
@@ -871,7 +872,8 @@ impl TransactionToCommitGen {
             .map(|(index, blob_gen)| {
                 (
                     StateKey::AccountAddressKey(universe.get_account_info(index).address),
-                    StateValue::from(blob_gen.materialize(index, universe)),
+                    StateKeyAndValue::new( StateKey::AccountAddressKey(universe.get_account_info(index).address),
+                                           StateValue::from(blob_gen.materialize(index, universe))),
                 )
             })
             .collect();

@@ -67,13 +67,15 @@ use aptos_types::{
     event::EventKey,
     ledger_info::LedgerInfoWithSignatures,
     proof::{
-        AccumulatorConsistencyProof, EventProof, SparseMerkleProof, StateStoreValueProof,
+        AccumulatorConsistencyProof, EventProof, SparseMerkleProof, StateStoreKeyValueProof,
         TransactionInfoListWithProof,
     },
     state_proof::StateProof,
     state_store::{
         state_key::StateKey,
-        state_value::{StateValue, StateValueChunkWithProof, StateValueWithProof},
+        state_value::{
+            StateKeyAndValue, StateValue, StateValueChunkWithProof, StateValueWithProof,
+        },
     },
     transaction::{
         AccountTransactionsWithProof, Transaction, TransactionInfo, TransactionListWithProof,
@@ -669,10 +671,10 @@ impl DbReader for AptosDB {
         gauged_api("get_latest_state_value", || {
             let ledger_info_with_sigs = self.ledger_store.get_latest_ledger_info()?;
             let version = ledger_info_with_sigs.ledger_info().version();
-            let (blob, _proof) = self
+            let (key_value, _proof) = self
                 .state_store
-                .get_value_with_proof_by_version(&state_key, version)?;
-            Ok(blob)
+                .get_key_value_with_proof_by_version(&state_key, version)?;
+            Ok(key_value.map(|x| x.value))
         })
     }
 
@@ -995,13 +997,13 @@ impl DbReader for AptosDB {
             let txn_info_with_proof = self
                 .ledger_store
                 .get_transaction_info_with_proof(version, ledger_version)?;
-            let (state_store_value, sparse_merkle_proof) = self
+            let (key_value, sparse_merkle_proof) = self
                 .state_store
-                .get_value_with_proof_by_version(&state_store_key, version)?;
+                .get_key_value_with_proof_by_version(&state_store_key, version)?;
             Ok(StateValueWithProof::new(
                 version,
-                state_store_value,
-                StateStoreValueProof::new(txn_info_with_proof, sparse_merkle_proof),
+                key_value.map(|x| x.value),
+                StateStoreKeyValueProof::new(txn_info_with_proof, sparse_merkle_proof),
             ))
         })
     }
@@ -1014,10 +1016,13 @@ impl DbReader for AptosDB {
         &self,
         state_store_key: &StateKey,
         version: Version,
-    ) -> Result<(Option<StateValue>, SparseMerkleProof<StateValue>)> {
+    ) -> Result<(
+        Option<StateKeyAndValue>,
+        SparseMerkleProof<StateKeyAndValue>,
+    )> {
         gauged_api("get_account_state_with_proof_by_version", || {
             self.state_store
-                .get_value_with_proof_by_version(state_store_key, version)
+                .get_key_value_with_proof_by_version(state_store_key, version)
         })
     }
 
@@ -1301,7 +1306,7 @@ impl DbWriter for AptosDB {
         &self,
         version: Version,
         expected_root_hash: HashValue,
-    ) -> Result<Box<dyn StateSnapshotReceiver<StateValue>>> {
+    ) -> Result<Box<dyn StateSnapshotReceiver<StateKeyAndValue>>> {
         gauged_api("get_state_snapshot_receiver", || {
             self.state_store
                 .get_snapshot_receiver(version, expected_root_hash)

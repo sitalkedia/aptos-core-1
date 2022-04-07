@@ -81,7 +81,7 @@ fn verify_state_in_store(
     root: HashValue,
 ) {
     let (value, proof) = store
-        .get_value_with_proof_by_version(&StateKey::AccountAddressKey(address), version)
+        .get_key_value_with_proof_by_version(&StateKey::AccountAddressKey(address), version)
         .unwrap();
     assert_eq!(
         value
@@ -106,7 +106,7 @@ fn test_empty_store() {
     let store = &db.state_store;
     let address = AccountAddress::new([1u8; AccountAddress::LENGTH]);
     assert!(store
-        .get_value_with_proof_by_version(&StateKey::AccountAddressKey(address), 0)
+        .get_key_value_with_proof_by_version(&StateKey::AccountAddressKey(address), 0)
         .is_err());
 }
 
@@ -224,7 +224,7 @@ fn test_retired_records() {
         );
         // root0 is gone.
         assert!(store
-            .get_value_with_proof_by_version(&StateKey::AccountAddressKey(address2), 0)
+            .get_key_value_with_proof_by_version(&StateKey::AccountAddressKey(address2), 0)
             .is_err());
         // root1 is still there.
         verify_state_in_store(store, address1, Some(&value1), 1, root1);
@@ -240,7 +240,7 @@ fn test_retired_records() {
         );
         // root1 is gone.
         assert!(store
-            .get_value_with_proof_by_version(&StateKey::AccountAddressKey(address2), 1)
+            .get_key_value_with_proof_by_version(&StateKey::AccountAddressKey(address2), 1)
             .is_err());
         // root2 is still there.
         verify_state_in_store(store, address1, Some(&value1), 2, root2);

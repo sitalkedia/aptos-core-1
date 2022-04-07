@@ -25,7 +25,7 @@ use aptos_types::{
     proof::{SparseMerkleProof, SparseMerkleRangeProof},
     state_store::{
         state_key::StateKey,
-        state_value::{StateValue, StateValueChunkWithProof},
+        state_value::{StateKeyAndValue, StateValue, StateValueChunkWithProof},
     },
     transaction::Version,
 };
@@ -34,9 +34,9 @@ use schemadb::{SchemaBatch, DB};
 use std::{collections::HashMap, sync::Arc};
 use storage_interface::StateSnapshotReceiver;
 
-type LeafNode = aptos_jellyfish_merkle::node_type::LeafNode<StateValue>;
-type Node = aptos_jellyfish_merkle::node_type::Node<StateValue>;
-type NodeBatch = aptos_jellyfish_merkle::NodeBatch<StateValue>;
+type LeafNode = aptos_jellyfish_merkle::node_type::LeafNode<StateKeyAndValue>;
+type Node = aptos_jellyfish_merkle::node_type::Node<StateKeyAndValue>;
+type NodeBatch = aptos_jellyfish_merkle::NodeBatch<StateKeyAndValue>;
 
 #[derive(Debug)]
 pub(crate) struct StateStore {
@@ -49,11 +49,14 @@ impl StateStore {
     }
 
     /// Get the account state blob given account address and root hash of state Merkle tree
-    pub fn get_value_with_proof_by_version(
+    pub fn get_key_value_with_proof_by_version(
         &self,
         state_key: &StateKey,
         version: Version,
-    ) -> Result<(Option<StateValue>, SparseMerkleProof<StateValue>)> {
+    ) -> Result<(
+        Option<StateKeyAndValue>,
+        SparseMerkleProof<StateKeyAndValue>,
+    )> {
         JellyfishMerkleTree::new(self).get_with_proof(state_key.hash(), version)
     }
 
@@ -70,17 +73,22 @@ impl StateStore {
     /// hashes for each write set.
     pub fn put_value_sets(
         &self,
-        value_state_sets: Vec<&HashMap<StateKey, StateValue>>,
+        value_state_sets: Vec<&HashMap<StateKey, StateKeyAndValue>>,
         node_hashes: Option<Vec<&HashMap<NibblePath, HashValue>>>,
         first_version: Version,
         cs: &mut ChangeSet,
     ) -> Result<Vec<HashValue>> {
         let value_sets = value_state_sets
             .into_iter()
-            .map(|account_states| {
-                account_states
+            .map(|value_set| {
+                value_set
                     .iter()
-                    .map(|(addr, blob)| (addr.hash(), blob))
+                    .map(|(key, value)| {
+                        (
+                            key.hash(),
+                            value,
+                        )
+                    })
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
@@ -160,15 +168,15 @@ impl StateStore {
         let result_iter =
             JellyfishMerkleIterator::new_by_index(Arc::clone(self), version, first_index)?
                 .take(chunk_size);
-        let account_blobs: Vec<(HashValue, StateValue)> =
+        let key_value_set: Vec<(HashValue, StateKeyAndValue)> =
             process_results(result_iter, |iter| iter.collect())?;
         ensure!(
-            !account_blobs.is_empty(),
+            !key_value_set.is_empty(),
             AptosDbError::NotFound(format!("State chunk starting at {}", first_index)),
         );
-        let last_index = (account_blobs.len() - 1 + first_index) as u64;
-        let first_key = account_blobs.first().expect("checked to exist").0;
-        let last_key = account_blobs.last().expect("checked to exist").0;
+        let last_index = (key_value_set.len() - 1 + first_index) as u64;
+        let first_key = key_value_set.first().expect("checked to exist").0;
+        let last_key = key_value_set.last().expect("checked to exist").0;
         let proof = self.get_value_range_proof(last_key, version)?;
         let root_hash = self.get_root_hash(version)?;
 
@@ -177,7 +185,7 @@ impl StateStore {
             last_index,
             first_key,
             last_key,
-            raw_values: account_blobs,
+            raw_values: key_value_set,
             proof,
             root_hash,
         })
@@ -187,7 +195,7 @@ impl StateStore {
         self: &Arc<Self>,
         version: Version,
         expected_root_hash: HashValue,
-    ) -> Result<Box<dyn StateSnapshotReceiver<StateValue>>> {
+    ) -> Result<Box<dyn StateSnapshotReceiver<StateKeyAndValue>>> {
         Ok(Box::new(JellyfishMerkleRestore::new_overwrite(
             Arc::clone(self),
             version,
@@ -196,7 +204,7 @@ impl StateStore {
     }
 }
 
-impl TreeReader<StateValue> for StateStore {
+impl TreeReader<StateKeyAndValue> for StateStore {
     fn get_node_option(&self, node_key: &NodeKey) -> Result<Option<Node>> {
         self.db.get::<JellyfishMerkleNodeSchema>(node_key)
     }
@@ -263,7 +271,7 @@ impl TreeReader<StateValue> for StateStore {
     }
 }
 
-impl TreeWriter<StateValue> for StateStore {
+impl TreeWriter<StateKeyAndValue> for StateStore {
     fn write_node_batch(&self, node_batch: &NodeBatch) -> Result<()> {
         let mut batch = SchemaBatch::new();
         add_node_batch(&mut batch, node_batch)?;

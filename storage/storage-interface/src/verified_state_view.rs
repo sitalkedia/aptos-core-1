@@ -13,7 +13,10 @@ use aptos_types::{
     account_state::AccountState,
     account_state_blob::AccountStateBlob,
     proof::SparseMerkleProof,
-    state_store::{state_key::StateKey, state_value::StateValue},
+    state_store::{
+        state_key::StateKey,
+        state_value::{StateKeyAndValue, StateValue},
+    },
     transaction::{Version, PRE_GENESIS_VERSION},
 };
 use move_core_types::account_address::AccountAddress;
@@ -42,7 +45,7 @@ pub struct VerifiedStateView {
     latest_persistent_state_root: HashValue,
 
     /// The in-memory version of sparse Merkle tree of which the states haven't been committed.
-    speculative_state: FrozenSparseMerkleTree<StateValue>,
+    speculative_state: FrozenSparseMerkleTree<StateKeyAndValue>,
 
     /// The cache of verified account states from `reader` and `speculative_state_view`,
     /// represented by a hashmap with an account address as key and a pair of an ordered
@@ -87,7 +90,7 @@ pub struct VerifiedStateView {
     /// the corresponding key has been deleted. This is a temporary hack until we support deletion
     /// in JMT node.
     state_cache: RwLock<HashMap<StateKey, StateValue>>,
-    state_proof_cache: RwLock<HashMap<HashValue, SparseMerkleProof<StateValue>>>,
+    state_proof_cache: RwLock<HashMap<HashValue, SparseMerkleProof<StateKeyAndValue>>>,
 }
 
 impl VerifiedStateView {
@@ -99,7 +102,7 @@ impl VerifiedStateView {
         reader: Arc<dyn DbReader>,
         latest_persistent_version: Option<Version>,
         latest_persistent_state_root: HashValue,
-        speculative_state: SparseMerkleTree<StateValue>,
+        speculative_state: SparseMerkleTree<StateKeyAndValue>,
     ) -> Self {
         // Hack: When there's no transaction in the db but state tree root hash is not the
         // placeholder hash, it implies that there's pre-genesis state present.
@@ -170,7 +173,7 @@ impl VerifiedStateView {
             // No matter it is in db or unknown, we have to query from db since even the
             // former case, we don't have the blob data but only its hash.
             StateStoreStatus::ExistsInDB | StateStoreStatus::Unknown => {
-                let (state_store_value, proof) = match self.latest_persistent_version {
+                let (state_store_key_value, proof) = match self.latest_persistent_version {
                     Some(version) => self
                         .reader
                         .get_state_value_with_proof_by_version(state_key, version)?,
@@ -180,7 +183,7 @@ impl VerifiedStateView {
                     .verify(
                         self.latest_persistent_state_root,
                         key_hash,
-                        state_store_value.as_ref(),
+                        state_store_key_value.as_ref(),
                     )
                     .map_err(|err| {
                         format_err!(
@@ -194,11 +197,11 @@ impl VerifiedStateView {
                 // multiple threads may enter this code, and another thread might add
                 // an address before this one. Thus the insertion might return a None here.
                 self.state_proof_cache.write().insert(key_hash, proof);
-                state_store_value
+                state_store_key_value
             }
         };
 
-        Ok(state_store_value_option)
+        Ok(state_store_value_option.map(|x| x.value))
     }
 
     fn get_and_cache_state_value(&self, state_key: &StateKey) -> Result<Option<Vec<u8>>> {
@@ -219,10 +222,10 @@ impl VerifiedStateView {
 }
 
 pub struct StateCache {
-    pub frozen_base: FrozenSparseMerkleTree<StateValue>,
+    pub frozen_base: FrozenSparseMerkleTree<StateKeyAndValue>,
     pub accounts: HashMap<AccountAddress, AccountState>,
     pub state_cache: HashMap<StateKey, StateValue>,
-    pub proofs: HashMap<HashValue, SparseMerkleProof<StateValue>>,
+    pub proofs: HashMap<HashValue, SparseMerkleProof<StateKeyAndValue>>,
 }
 
 impl StateView for VerifiedStateView {

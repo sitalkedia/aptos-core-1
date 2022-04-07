@@ -540,11 +540,11 @@ fn verify_committed_transactions(
         assert_eq!(txn_output_list_with_proof.transactions_and_outputs.len(), 1);
 
         // Fetch and verify account states.
-        for (state_key, state_value) in txn_to_commit.state_updates() {
+        for (state_key, state_key_and_value) in txn_to_commit.state_updates() {
             let state_value_with_proof = db
                 .get_state_value_with_proof(state_key.clone(), cur_ver, ledger_version)
                 .unwrap();
-            assert_eq!(state_value_with_proof.value, Some(state_value.clone()));
+            assert_eq!(state_value_with_proof.value, Some(state_key_and_value.clone()));
             state_value_with_proof
                 .verify(ledger_info, cur_ver, state_key.clone())
                 .unwrap();

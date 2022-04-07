@@ -21,7 +21,10 @@ use aptos_types::{
     nibble::nibble_path::NibblePath,
     on_chain_config,
     proof::accumulator::InMemoryAccumulator,
-    state_store::{state_key::StateKey, state_value::StateValue},
+    state_store::{
+        state_key::StateKey,
+        state_value::{StateKeyAndValue, StateValue},
+    },
     transaction::{
         Transaction, TransactionInfo, TransactionOutput, TransactionPayload, TransactionStatus,
     },
@@ -159,9 +162,9 @@ impl ApplyChunkOutput {
         new_epoch: bool,
         to_keep: &[(Transaction, ParsedTransactionOutput)],
     ) -> Result<(
-        Vec<HashMap<StateKey, StateValue>>,
+        Vec<HashMap<StateKey, StateKeyAndValue>>,
         Vec<(HashValue, HashMap<NibblePath, HashValue>)>,
-        SparseMerkleTree<StateValue>,
+        SparseMerkleTree<StateKeyAndValue>,
         Option<EpochState>,
     )> {
         let StateCache {
@@ -189,7 +192,6 @@ impl ApplyChunkOutput {
         // Release ASAP the ref to the base SMT to allow old in-mem nodes to be dropped,
         // now that we don't require access to them.
         let result_state = result_state.unfreeze();
-
         // Get the updated validator set from updated account state.
         let next_epoch_state = if new_epoch {
             Some(Self::parse_validator_set(&accounts)?)
@@ -206,8 +208,8 @@ impl ApplyChunkOutput {
     }
 
     fn state_store_updates_to_smt_updates(
-        account_blobs: &[HashMap<StateKey, StateValue>],
-    ) -> Vec<Vec<(HashValue, &StateValue)>> {
+        account_blobs: &[HashMap<StateKey, StateKeyAndValue>],
+    ) -> Vec<Vec<(HashValue, &StateKeyAndValue)>> {
         account_blobs
             .iter()
             .map(|m| {
@@ -244,7 +246,7 @@ impl ApplyChunkOutput {
 
     fn assemble_ledger_diff(
         to_keep: Vec<(Transaction, ParsedTransactionOutput)>,
-        state_updates: Vec<HashMap<StateKey, StateValue>>,
+        state_updates: Vec<HashMap<StateKey, StateKeyAndValue>>,
         roots_with_node_hashes: Vec<(HashValue, HashMap<NibblePath, HashValue>)>,
     ) -> (Vec<(Transaction, TransactionData)>, Vec<HashValue>) {
         let mut to_commit = vec![];
@@ -383,7 +385,7 @@ pub fn process_write_set(
     account_to_state: &mut HashMap<AccountAddress, AccountState>,
     state_cache: &mut HashMap<StateKey, StateValue>,
     write_set: WriteSet,
-) -> Result<HashMap<StateKey, StateValue>> {
+) -> Result<HashMap<StateKey, StateKeyAndValue>> {
     let mut state_updates = HashMap::new();
 
     // Find all addresses this transaction touches while processing each write op.
@@ -419,15 +421,15 @@ pub fn process_write_set(
                     .get(&address)
                     .expect("Address should exist.");
                 state_updates.insert(
-                    state_key,
-                    StateValue::from(AccountStateBlob::try_from(account_state)?),
+                    state_key.clone(),
+                    StateKeyAndValue::new(state_key, StateValue::from(AccountStateBlob::try_from(account_state)?)),
                 );
             }
             _ => {
                 let state_value = state_cache
                     .get(&state_key)
                     .expect("State value should exist.");
-                state_updates.insert(state_key, state_value.clone());
+                state_updates.insert(state_key.clone(), StateKeyAndValue::new(state_key,state_value.clone()));
             }
         }
     }

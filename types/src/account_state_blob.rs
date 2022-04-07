@@ -4,7 +4,7 @@
 use crate::{
     account_config::{AccountResource, BalanceResource, DiemAccountResource},
     account_state::AccountState,
-    state_store::state_value::StateValue,
+    state_store::state_value::{StateKeyAndValue, StateValue},
 };
 use anyhow::{anyhow, format_err, Error, Result};
 use aptos_crypto::{
@@ -107,6 +107,14 @@ impl TryFrom<StateValue> for AccountStateBlob {
             .maybe_bytes
             .ok_or_else(|| format_err!("Empty state value passed"))?;
         Ok(AccountStateBlob::from(bytes))
+    }
+}
+
+impl TryFrom<StateKeyAndValue> for AccountStateBlob {
+    type Error = Error;
+
+    fn try_from(state_store_key_value: StateKeyAndValue) -> Result<Self> {
+        AccountStateBlob::try_from(state_store_key_value.value)
     }
 }
 

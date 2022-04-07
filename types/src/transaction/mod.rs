@@ -53,6 +53,7 @@ pub use script::{
 use crate::state_store::{state_key::StateKey, state_value::StateValue};
 use std::{collections::BTreeSet, hash::Hash, ops::Deref, sync::atomic::AtomicU64};
 pub use transaction_argument::{parse_transaction_argument, TransactionArgument, VecBytes};
+use crate::state_store::state_value::StateKeyAndValue;
 
 pub type Version = u64; // Height - also used for MVCC in StateDB
 pub type AtomicVersion = AtomicU64;
@@ -1054,7 +1055,7 @@ impl Display for TransactionInfo {
 pub struct TransactionToCommit {
     transaction: Transaction,
     transaction_info: TransactionInfo,
-    state_updates: HashMap<StateKey, StateValue>,
+    state_updates: HashMap<StateKey, StateKeyAndValue>,
     jf_node_hashes: Option<HashMap<NibblePath, HashValue>>,
     write_set: WriteSet,
     events: Vec<ContractEvent>,
@@ -1064,7 +1065,7 @@ impl TransactionToCommit {
     pub fn new(
         transaction: Transaction,
         transaction_info: TransactionInfo,
-        state_updates: HashMap<StateKey, StateValue>,
+        state_updates: HashMap<StateKey, StateKeyAndValue>,
         jf_node_hashes: Option<HashMap<NibblePath, HashValue>>,
         write_set: WriteSet,
         events: Vec<ContractEvent>,
@@ -1092,7 +1093,7 @@ impl TransactionToCommit {
         self.transaction_info = txn_info
     }
 
-    pub fn state_updates(&self) -> &HashMap<StateKey, StateValue> {
+    pub fn state_updates(&self) -> &HashMap<StateKey, StateKeyAndValue> {
         &self.state_updates
     }
 

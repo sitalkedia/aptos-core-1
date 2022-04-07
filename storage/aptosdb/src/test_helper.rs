@@ -31,7 +31,7 @@ prop_compose! {
         type EventAccumulator = InMemoryAccumulator<EventAccumulatorHasher>;
         type TxnAccumulator = InMemoryAccumulator<TransactionAccumulatorHasher>;
 
-        let mut smt = SparseMerkleTree::<StateValue>::default().freeze();
+        let mut smt = SparseMerkleTree::<StateKeyAndValue>::default().freeze();
         let mut txn_accumulator = TxnAccumulator::new_empty();
         let mut result = Vec::new();
 
@@ -50,7 +50,8 @@ prop_compose! {
                 let state_checkpoint_hash = if txn.state_updates().is_empty() {
                     None
                 } else {
-                    let updates = txn.state_updates().iter().map(|(key, value)| {(key.hash(), value)}).collect();
+                    let txn_updates : Vec<(HashValue, StateKeyAndValue)> = txn.state_updates().iter().map(|(key, value)| {(key.hash(), value.clone())}).collect();
+                    let updates = txn_updates.iter().map(|(x, y)| (*x, y)).collect();
                     smt = smt.batch_update(updates, &ProofReader::new_empty()).unwrap();
 
                     Some(smt.root_hash())

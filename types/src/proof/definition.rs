@@ -26,6 +26,7 @@ use aptos_crypto::{
 use proptest_derive::Arbitrary;
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
+use crate::state_store::state_value::StateKeyAndValue;
 
 /// A proof that can be used authenticate an element in an accumulator given trusted root hash. For
 /// example, both `LedgerInfoToTransactionInfoProof` and `TransactionInfoToEventProof` can be
@@ -712,21 +713,21 @@ impl TransactionInfoWithProof {
 /// the `TransactionInfo` object and the `SparseMerkleProof` from state root to the resource.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[cfg_attr(any(test, feature = "fuzzing"), derive(Arbitrary))]
-pub struct StateStoreValueProof {
+pub struct StateStoreKeyValueProof {
     transaction_info_with_proof: TransactionInfoWithProof,
 
     /// The sparse merkle proof from state root to the account state.
-    transaction_info_to_value_proof: SparseMerkleProof<StateValue>,
+    transaction_info_to_value_proof: SparseMerkleProof<StateKeyAndValue>,
 }
 
-impl StateStoreValueProof {
+impl StateStoreKeyValueProof {
     /// Constructs a new `AccountStateProof` using given `ledger_info_to_transaction_info_proof`,
     /// `transaction_info` and `transaction_info_to_account_proof`.
     pub fn new(
         transaction_info_with_proof: TransactionInfoWithProof,
-        transaction_info_to_value_proof: SparseMerkleProof<StateValue>,
+        transaction_info_to_value_proof: SparseMerkleProof<StateKeyAndValue>,
     ) -> Self {
-        StateStoreValueProof {
+        StateStoreKeyValueProof {
             transaction_info_with_proof,
             transaction_info_to_value_proof,
         }
@@ -738,7 +739,7 @@ impl StateStoreValueProof {
     }
 
     /// Returns the `transaction_info_to_account_proof` object in this proof.
-    pub fn transaction_info_to_account_proof(&self) -> &SparseMerkleProof<StateValue> {
+    pub fn transaction_info_to_account_proof(&self) -> &SparseMerkleProof<StateKeyAndValue> {
         &self.transaction_info_to_value_proof
     }
 
@@ -750,7 +751,7 @@ impl StateStoreValueProof {
         ledger_info: &LedgerInfo,
         state_version: Version,
         value_hash: HashValue,
-        state_store_value: Option<&StateValue>,
+        state_store_value: Option<&StateKeyAndValue>,
     ) -> Result<()> {
         self.transaction_info_to_value_proof.verify(
             self.transaction_info_with_proof

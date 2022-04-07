@@ -5,7 +5,7 @@ use crate::{
     account_state_blob::AccountStateBlob,
     proof::{
         definition::{
-            EventProof, StateStoreValueProof, TransactionInfoListWithProof,
+            EventProof, StateStoreKeyValueProof, TransactionInfoListWithProof,
             TransactionInfoWithProof,
         },
         AccumulatorConsistencyProof, SparseMerkleRangeProof, TestAccumulatorProof,
@@ -63,7 +63,7 @@ proptest! {
 
 
     #[test]
-    fn test_account_state_proof_bcs_roundtrip(proof in any::<StateStoreValueProof>()) {
+    fn test_account_state_proof_bcs_roundtrip(proof in any::<StateStoreKeyValueProof>()) {
         assert_canonical_encode_decode(proof);
     }
 

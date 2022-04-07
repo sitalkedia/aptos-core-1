@@ -24,7 +24,10 @@ use aptos_types::{
     ledger_info::LedgerInfoWithSignatures,
     nibble::nibble_path::NibblePath,
     proof::{accumulator::InMemoryAccumulator, AccumulatorExtensionProof},
-    state_store::{state_key::StateKey, state_value::StateValue},
+    state_store::{
+        state_key::StateKey,
+        state_value::{StateKeyAndValue, StateValue},
+    },
     transaction::{
         Transaction, TransactionInfo, TransactionListWithProof, TransactionOutputListWithProof,
         TransactionStatus, Version,
@@ -39,8 +42,8 @@ use storage_interface::DbReader;
 pub use executed_chunk::ExecutedChunk;
 use storage_interface::verified_state_view::VerifiedStateView;
 
-type SparseMerkleProof = aptos_types::proof::SparseMerkleProof<StateValue>;
-type SparseMerkleTree = scratchpad::SparseMerkleTree<StateValue>;
+type SparseMerkleProof = aptos_types::proof::SparseMerkleProof<StateKeyAndValue>;
+type SparseMerkleTree = scratchpad::SparseMerkleTree<StateKeyAndValue>;
 
 pub trait ChunkExecutorTrait: Send + Sync {
     /// Verifies the transactions based on the provided proofs and ledger info. If the transactions
@@ -389,7 +392,7 @@ impl ProofReader {
     }
 }
 
-impl ProofRead<StateValue> for ProofReader {
+impl ProofRead<StateKeyAndValue> for ProofReader {
     fn get_proof(&self, key: HashValue) -> Option<&SparseMerkleProof> {
         self.account_to_proof.get(&key)
     }
@@ -401,7 +404,7 @@ impl ProofRead<StateValue> for ProofReader {
 pub struct TransactionData {
     /// Each entry in this map represents the new value of a store store object touched by this
     /// transaction.
-    state_updates: HashMap<StateKey, StateValue>,
+    state_updates: HashMap<StateKey, StateKeyAndValue>,
 
     /// Each entry in this map represents the the hash of a newly generated jellyfish node
     /// and its corresponding nibble path.
@@ -434,7 +437,7 @@ pub struct TransactionData {
 
 impl TransactionData {
     pub fn new(
-        state_updates: HashMap<StateKey, StateValue>,
+        state_updates: HashMap<StateKey, StateKeyAndValue>,
         jf_node_hashes: HashMap<NibblePath, HashValue>,
         write_set: WriteSet,
         events: Vec<ContractEvent>,
@@ -459,7 +462,7 @@ impl TransactionData {
         }
     }
 
-    pub fn state_updates(&self) -> &HashMap<StateKey, StateValue> {
+    pub fn state_updates(&self) -> &HashMap<StateKey, StateKeyAndValue> {
         &self.state_updates
     }
 

@@ -10,7 +10,7 @@ use aptos_secure_net::NetworkClient;
 use aptos_types::{
     ledger_info::LedgerInfoWithSignatures,
     proof::SparseMerkleProof,
-    state_store::{state_key::StateKey, state_value::StateValue},
+    state_store::{state_key::StateKey, state_value::StateKeyAndValue},
     transaction::{TransactionToCommit, Version},
 };
 use serde::de::DeserializeOwned;
@@ -56,7 +56,13 @@ impl StorageClient {
         &self,
         state_key: &StateKey,
         version: Version,
-    ) -> std::result::Result<(Option<StateValue>, SparseMerkleProof<StateValue>), Error> {
+    ) -> std::result::Result<
+        (
+            Option<StateKeyAndValue>,
+            SparseMerkleProof<StateKeyAndValue>,
+        ),
+        Error,
+    > {
         self.request(StorageRequest::GetStateValueWithProofByVersionRequest(
             Box::new(GetStateValueWithProofByVersionRequest::new(
                 state_key.clone(),
@@ -86,7 +92,10 @@ impl DbReader for StorageClient {
         &self,
         state_key: &StateKey,
         version: u64,
-    ) -> Result<(Option<StateValue>, SparseMerkleProof<StateValue>)> {
+    ) -> Result<(
+        Option<StateKeyAndValue>,
+        SparseMerkleProof<StateKeyAndValue>,
+    )> {
         Ok(Self::get_state_value_with_proof_by_version(
             self, state_key, version,
         )?)
