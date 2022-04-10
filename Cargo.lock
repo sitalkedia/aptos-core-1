@@ -468,6 +468,7 @@ dependencies = [
  "aptos-global-constants",
  "aptos-management",
  "aptos-secure-storage",
+ "aptos-state-view",
  "aptos-temppath",
  "aptos-types",
  "aptos-vm",
@@ -686,6 +687,7 @@ dependencies = [
  "aptos-mempool",
  "aptos-metrics",
  "aptos-secure-storage",
+ "aptos-state-view",
  "aptos-telemetry",
  "aptos-temppath",
  "aptos-time-service",
@@ -915,6 +917,11 @@ dependencies = [
  "aptos-crypto",
  "aptos-types",
  "aptos-workspace-hack",
+ "bcs",
+ "move-core-types",
+ "serde 1.0.136",
+ "serde_bytes",
+ "serde_json",
 ]
 
 [[package]]

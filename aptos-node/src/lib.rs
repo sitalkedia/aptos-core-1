@@ -14,6 +14,7 @@ use aptos_data_client::aptosnet::AptosNetDataClient;
 use aptos_infallible::RwLock;
 use aptos_logger::{prelude::*, Logger};
 use aptos_metrics::{get_public_json_metrics, get_public_metrics, metric_server};
+use aptos_state_view::account_state_view::AccountStateView;
 use aptos_telemetry::{
     constants::{APTOS_NODE_PUSH_METRICS, CHAIN_ID_METRIC, PEER_ID_METRIC},
     send_data,
@@ -222,19 +223,23 @@ pub fn load_test_environment<R>(
 
 // Fetch chain ID from on-chain resource
 fn fetch_chain_id(db: &DbReaderWriter) -> ChainId {
-    let blob = db
-        .reader
-        .get_state_value_with_proof_by_version(
-            &StateKey::AccountAddressKey(aptos_root_address()),
-            (&*db.reader)
-                .fetch_synced_version()
-                .expect("[aptos-node] failed fetching synced version."),
-        )
-        .expect("[aptos-node] failed to get Aptos root address account state")
-        .0
-        .expect("[aptos-node] missing Aptos root address account state");
-    AccountState::try_from(&blob)
-        .expect("[aptos-node] failed to convert blob to account state")
+    let synced_version = (&*db.reader)
+        .fetch_synced_version()
+        .expect("[aptos-node] failed fetching synced version.");
+    let account_state_view = AccountStateView {
+        account_address: &aptos_root_address(),
+        state_value_resolver: (|x| {
+            let (state_value_option, _) = db
+                .reader
+                .get_state_value_with_proof_by_version(x, synced_version)?;
+            if let Some(state_value) = state_value_option {
+                return Ok(state_value.maybe_bytes.as_ref().cloned());
+            } else {
+                Ok(None)
+            }
+        }),
+    };
+    account_state_view
         .get_chain_id_resource()
         .expect("[aptos-node] failed to get chain ID resource")
         .expect("[aptos-node] missing chain ID resource")

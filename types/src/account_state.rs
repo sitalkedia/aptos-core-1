@@ -4,26 +4,18 @@
 use crate::{
     access_path::Path,
     account_address::AccountAddress,
-    account_config::{
-        currency_code_from_type_tag, AccountResource, AccountRole, BalanceResource, CRSNResource,
-        ChainIdResource, ChildVASP, Credential, CurrencyInfoResource, DesignatedDealer,
-        DesignatedDealerPreburns, DiemAccountResource, FreezingBit, ParentVASP,
-        PreburnQueueResource, PreburnResource,
-    },
+    account_config::{AccountResource, BalanceResource, ChainIdResource, DiemAccountResource},
     account_state_blob::AccountStateBlob,
-    block_metadata::BlockResource,
     on_chain_config::{
         access_path_for_config, dpn_access_path_for_config, ConfigurationResource, OnChainConfig,
-        RegisteredCurrencies, VMPublishingOption, ValidatorSet, Version,
+        ValidatorSet, Version,
     },
     state_store::state_value::StateValue,
     timestamp::TimestampResource,
     validator_config::{ValidatorConfigResource, ValidatorOperatorConfigResource},
 };
 use anyhow::{format_err, Error, Result};
-use move_core_types::{
-    identifier::Identifier, language_storage::StructTag, move_resource::MoveResource,
-};
+use move_core_types::{language_storage::StructTag, move_resource::MoveResource};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use std::{collections::btree_map::BTreeMap, convert::TryFrom, fmt};
 
@@ -58,40 +50,8 @@ impl AccountState {
         }
     }
 
-    pub fn get_crsn_resource(&self) -> Result<Option<CRSNResource>> {
-        self.get_resource::<CRSNResource>()
-    }
-
     pub fn get_balance_resources(&self) -> Result<Option<BalanceResource>> {
         self.get_resource::<BalanceResource>()
-    }
-
-    pub fn get_preburn_balances(&self) -> Result<BTreeMap<Identifier, PreburnResource>> {
-        self.get_resources_with_type::<PreburnResource>()
-            .map(|maybe_resource| {
-                let (struct_tag, resource) = maybe_resource?;
-                let currency_code = collect_exactly_one(struct_tag.type_params.into_iter())
-                    .ok_or_else(|| format_err!("expected one currency_code type tag"))
-                    .and_then(currency_code_from_type_tag)?;
-                Ok((currency_code, resource))
-            })
-            .collect()
-    }
-
-    pub fn get_preburn_queue_balances(&self) -> Result<BTreeMap<Identifier, PreburnQueueResource>> {
-        self.get_resources_with_type::<PreburnQueueResource>()
-            .map(|maybe_resource| {
-                let (struct_tag, resource) = maybe_resource?;
-                let currency_code = collect_exactly_one(struct_tag.type_params.into_iter())
-                    .ok_or_else(|| format_err!("expected one currency_code type tag"))
-                    .and_then(currency_code_from_type_tag)?;
-                Ok((currency_code, resource))
-            })
-            .collect()
-    }
-
-    pub fn get_chain_id_resource(&self) -> Result<Option<ChainIdResource>> {
-        self.get_resource::<ChainIdResource>()
     }
 
     pub fn get_configuration_resource(&self) -> Result<Option<ConfigurationResource>> {
@@ -112,96 +72,12 @@ impl AccountState {
         self.get_resource::<ValidatorOperatorConfigResource>()
     }
 
-    pub fn get_freezing_bit(&self) -> Result<Option<FreezingBit>> {
-        self.get_resource::<FreezingBit>()
-    }
-
-    pub fn get_account_role(&self) -> Result<Option<AccountRole>> {
-        if self.0.contains_key(&ParentVASP::resource_path()) {
-            match (
-                self.get_resource::<ParentVASP>(),
-                self.get_resource::<Credential>(),
-            ) {
-                (Ok(Some(vasp)), Ok(Some(credential))) => {
-                    Ok(Some(AccountRole::ParentVASP { vasp, credential }))
-                }
-                _ => Ok(None),
-            }
-        } else if self.0.contains_key(&ChildVASP::resource_path()) {
-            self.get_resource::<ChildVASP>()
-                .map(|r_opt| r_opt.map(AccountRole::ChildVASP))
-        } else if self.0.contains_key(&DesignatedDealer::resource_path()) {
-            match (
-                self.get_resource::<Credential>(),
-                self.get_preburn_balances(),
-                self.get_preburn_queue_balances(),
-                self.get_resource::<DesignatedDealer>(),
-            ) {
-                (
-                    Ok(Some(dd_credential)),
-                    Ok(preburn_balances),
-                    Ok(preburn_queues),
-                    Ok(Some(designated_dealer)),
-                ) => {
-                    let preburn_balances =
-                        if preburn_balances.is_empty() && !preburn_queues.is_empty() {
-                            DesignatedDealerPreburns::PreburnQueue(preburn_queues)
-                        } else if !preburn_balances.is_empty() && preburn_queues.is_empty() {
-                            DesignatedDealerPreburns::Preburn(preburn_balances)
-                        } else {
-                            return Ok(None);
-                        };
-                    Ok(Some(AccountRole::DesignatedDealer {
-                        dd_credential,
-                        preburn_balances,
-                        designated_dealer,
-                    }))
-                }
-                _ => Ok(None),
-            }
-        } else {
-            // TODO: add role_id to Unknown
-            Ok(Some(AccountRole::Unknown))
-        }
-    }
-
     pub fn get_validator_set(&self) -> Result<Option<ValidatorSet>> {
         self.get_config::<ValidatorSet>()
     }
 
     pub fn get_version(&self) -> Result<Option<Version>> {
         self.get_config::<Version>()
-    }
-
-    pub fn get_vm_publishing_option(&self) -> Result<Option<VMPublishingOption>> {
-        self.0
-            .get(&dpn_access_path_for_config(VMPublishingOption::CONFIG_ID).path)
-            .map(|bytes| VMPublishingOption::deserialize_into_config(bytes))
-            .transpose()
-            .map_err(Into::into)
-    }
-
-    pub fn get_registered_currency_info_resources(&self) -> Result<Vec<CurrencyInfoResource>> {
-        let currencies: Option<RegisteredCurrencies> = self.get_config()?;
-        match currencies {
-            Some(currencies) => {
-                let codes = currencies.currency_codes();
-                let mut resources = vec![];
-                for code in codes {
-                    let access_path = CurrencyInfoResource::resource_path_for(code.clone());
-                    let info: CurrencyInfoResource = self
-                        .get_resource_impl(&access_path.path)?
-                        .ok_or_else(|| format_err!("currency info resource not found: {}", code))?;
-                    resources.push(info);
-                }
-                Ok(resources)
-            }
-            None => Ok(vec![]),
-        }
-    }
-
-    pub fn get_block_resource(&self) -> Result<Option<BlockResource>> {
-        self.get_resource::<BlockResource>()
     }
 
     pub fn get(&self, key: &[u8]) -> Option<&Vec<u8>> {
@@ -267,30 +143,6 @@ impl AccountState {
         self.0.iter().filter_map(|(k, v)| match Path::try_from(k) {
             Ok(Path::Resource(struct_tag)) => Some((struct_tag, v.as_ref())),
             Ok(Path::Code(_)) | Err(_) => None,
-        })
-    }
-
-    /// Given a particular `MoveResource`, return an iterator with all instances
-    /// of that resource (there may be multiple with different generic type parameters).
-    pub fn get_resources_with_type<T: MoveResource>(
-        &self,
-    ) -> impl Iterator<Item = Result<(StructTag, T)>> + '_ {
-        self.get_resources().filter_map(|(struct_tag, bytes)| {
-            let matches_resource = struct_tag.address == T::ADDRESS
-                && struct_tag.module.as_ref() == T::MODULE_NAME
-                && struct_tag.name.as_ref() == T::STRUCT_NAME;
-            if matches_resource {
-                match bcs::from_bytes::<T>(bytes) {
-                    Ok(resource) => Some(Ok((struct_tag, resource))),
-                    Err(err) => Some(Err(format_err!(
-                        "failed to deserialize resource: '{}', error: {:?}",
-                        struct_tag,
-                        err
-                    ))),
-                }
-            } else {
-                None
-            }
         })
     }
 }
@@ -385,15 +237,5 @@ impl TryFrom<(&AccountResource, &DiemAccountResource, &BalanceResource)> for Acc
         );
 
         Ok(Self(btree_map))
-    }
-}
-
-/// If an iterator contains exactly one item, then return it. Otherwise return
-/// `None` if there are no items or more than one items.
-fn collect_exactly_one<T>(iter: impl Iterator<Item = T>) -> Option<T> {
-    let mut iter = iter.fuse();
-    match (iter.next(), iter.next()) {
-        (Some(item), None) => Some(item),
-        _ => None,
     }
 }

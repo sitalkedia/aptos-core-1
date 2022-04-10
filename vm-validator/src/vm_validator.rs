@@ -2,20 +2,18 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use anyhow::Result;
+use aptos_state_view::account_state_view::AccountStateView;
 use aptos_state_view::StateViewId;
 use aptos_types::{
     account_address::AccountAddress,
-    account_config::{AccountResource, AccountSequenceInfo},
-    account_state::AccountState,
-    account_state_blob::AccountStateBlob,
+    account_config::AccountSequenceInfo,
     on_chain_config::OnChainConfigPayload,
-    state_store::state_key::StateKey,
     transaction::{SignedTransaction, VMValidatorResult},
 };
 use aptos_vm::AptosVM;
 use executor::components::apply_chunk_output::IntoLedgerView;
 use fail::fail_point;
-use std::{convert::TryFrom, sync::Arc};
+use std::sync::Arc;
 use storage_interface::{verified_state_view::VerifiedStateView, DbReader};
 
 #[cfg(test)]
@@ -112,18 +110,27 @@ pub fn get_account_sequence_number(
             "Injected error in get_account_sequence_number"
         ))
     });
-    match storage.get_latest_state_value(StateKey::AccountAddressKey(address))? {
-        Some(blob) => {
-            if let Ok(Some(crsn)) = AccountState::try_from(&blob)?.get_crsn_resource() {
-                return Ok(AccountSequenceInfo::CRSN {
-                    min_nonce: crsn.min_nonce(),
-                    size: crsn.size(),
-                });
+    let account_state_view = AccountStateView {
+        account_address: &address,
+        state_value_resolver: (|x| {
+            if let Some(value) = storage.get_latest_state_value(x.clone())? {
+                return Ok(value.maybe_bytes.as_ref().cloned());
             }
-            let seqno =
-                AccountResource::try_from(&AccountStateBlob::try_from(blob)?)?.sequence_number();
-            Ok(AccountSequenceInfo::Sequential(seqno))
-        }
+            Ok(None)
+        }),
+    };
+
+    if let Ok(Some(crsn)) = account_state_view.get_crsn_resource() {
+        return Ok(AccountSequenceInfo::CRSN {
+            min_nonce: crsn.min_nonce(),
+            size: crsn.size(),
+        });
+    }
+
+    match account_state_view.get_account_resource()? {
+        Some(account_resource) => Ok(AccountSequenceInfo::Sequential(
+            account_resource.sequence_number(),
+        )),
         None => Ok(AccountSequenceInfo::Sequential(0)),
     }
 }

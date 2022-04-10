@@ -10,6 +10,8 @@ use aptos_crypto::HashValue;
 use aptos_types::{state_store::state_key::StateKey, transaction::Version};
 use std::ops::Deref;
 
+pub mod account_state_view;
+
 /// `StateView` is a trait that defines a read-only snapshot of the global state. It is passed to
 /// the VM for transaction execution, during which the VM is guaranteed to read anything at the
 /// given state.
@@ -55,4 +57,9 @@ where
     fn is_genesis(&self) -> bool {
         self.deref().is_genesis()
     }
+}
+
+pub trait StateValueResolver {
+    /// Gets the state value for a given state key.
+    fn get_state_value(&self, state_key: &StateKey) -> Result<Option<Vec<u8>>>;
 }

@@ -10,17 +10,16 @@ use aptos_management::{
     config::ConfigPath, error::Error, secure_backend::ValidatorBackend,
     storage::StorageWrapper as Storage,
 };
+use aptos_state_view::account_state_view::AccountStateView;
 use aptos_temppath::TempPath;
 use aptos_types::{
-    account_address::AccountAddress, account_config, account_state::AccountState,
-    network_address::NetworkAddress, on_chain_config::ValidatorSet,
-    state_store::state_key::StateKey, validator_config::ValidatorConfig, waypoint::Waypoint,
+    account_address::AccountAddress, account_config, network_address::NetworkAddress,
+    on_chain_config::ValidatorSet, validator_config::ValidatorConfig, waypoint::Waypoint,
 };
 use aptos_vm::AptosVM;
 use aptosdb::AptosDB;
 use executor::db_bootstrapper;
 use std::{
-    convert::TryFrom,
     fmt::Write,
     fs::File,
     io::Read,
@@ -239,15 +238,17 @@ fn validator_config(
     validator_account: AccountAddress,
     reader: Arc<dyn DbReader>,
 ) -> Result<ValidatorConfig, Error> {
-    let blob = reader
-        .get_latest_state_value(StateKey::AccountAddressKey(
-            account_config::validator_set_address(),
-        ))
-        .map_err(|e| Error::UnexpectedError(format!("ValidatorSet Account issue {}", e)))?
-        .ok_or_else(|| Error::UnexpectedError("ValidatorSet Account not found".into()))?;
-    let account_state = AccountState::try_from(&blob)
-        .map_err(|e| Error::UnexpectedError(format!("Failed to parse blob: {}", e)))?;
-    let validator_set: ValidatorSet = account_state
+    let account_state_view = AccountStateView {
+        account_address: &account_config::validator_set_address(),
+        state_value_resolver: (|x| {
+            if let Some(value) = reader.get_latest_state_value(x.clone())? {
+                return Ok(value.maybe_bytes.as_ref().cloned());
+            }
+            Ok(None)
+        }),
+    };
+
+    let validator_set: ValidatorSet = account_state_view
         .get_validator_set()
         .map_err(|e| Error::UnexpectedError(format!("ValidatorSet issue {}", e)))?
         .ok_or_else(|| Error::UnexpectedError("ValidatorSet does not exist".into()))?;
